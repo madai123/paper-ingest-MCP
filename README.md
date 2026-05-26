@@ -39,7 +39,6 @@ ZHIPU_API_KEY=你的智谱 API Key
 GLMOCR_OUTPUT_PATH=./glmocr_results
 ```
 
-`.env` 已被 `.gitignore` 忽略，不要把真实密钥提交到仓库。
 
 ## MCP 配置
 
