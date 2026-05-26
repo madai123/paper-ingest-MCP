@@ -26,7 +26,7 @@ async def parse_with_glmocr(
     api_key: str | None = None,
 ) -> dict[str, Any]:
     """
-    Parse local PDFs or URLs with GLM-OCR concurrently.
+    Parse local files or public URLs with GLM-OCR MaaS/API concurrently.
 
     Use sources for explicit local paths or URLs. filenames optionally provides
     output stems in the same order as sources.
@@ -62,8 +62,8 @@ async def parse_with_glmocr(
         command.extend(["--url" if _is_url(source) else "--file", source])
     for filename in filenames:
         command.extend(["--filename", filename])
-    if layout_device:
-        command.extend(["--layout-device", layout_device])
+    # API/MaaS mode does not use local layout devices. Keep the parameter for
+    # backward-compatible tool schemas, but do not forward it to GLM-OCR.
     if config:
         command.extend(["--config", config])
     if api_key:
@@ -118,9 +118,9 @@ def get_server_sop() -> dict[str, Any]:
     return {
         "status": "success",
         "sop": [
-            "Call parse_with_glmocr(sources=[...]) for local PDF paths, public PDF URLs, or image files.",
-            "Prefer local file paths for batches. Public URLs are fetched before OCR, so use conservative concurrency for third-party hosts.",
-            "For local files, OCR concurrency can be raised based on API quota.",
+            "Call parse_with_glmocr(sources=[...]) for local PDF/image paths or public PDF/image URLs.",
+            "This server forces GLM-OCR MaaS/API mode and does not require a local OCR service.",
+            "Use conservative concurrency for public URLs and large PDFs because each item is sent to the remote API.",
             "Use parse_with_glmocr results and the output_dir/<filename>/ layout for downstream tools such as Obsidian.",
         ],
     }

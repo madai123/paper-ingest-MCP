@@ -1,10 +1,11 @@
 # paper-ingest-mcp
 
-`paper-ingest-mcp` 是一个本地 MCP Server，用来把论文 PDF、图片或公开 PDF URL 交给 GLM-OCR 解析，并把结果保存成稳定的 Markdown、JSON、图片和 manifest 路径，方便 Agent 后续写入 Obsidian、知识库或其他论文处理流程。
+`paper-ingest-mcp` 是一个本地 MCP Server，用来把论文 PDF、图片或公开 PDF URL 交给 GLM-OCR API 解析，并把结果保存成稳定的 Markdown、JSON、图片和 manifest 路径，方便 Agent 后续写入 Obsidian、知识库或其他论文处理流程。
 
 ## 功能
 
-- 支持本地 PDF、图片、目录和公开 URL。
+- 支持本地 PDF、图片、目录和公开 URL 作为输入。
+- 只使用 GLM-OCR MaaS/API 模式，不需要配置本地 OCR 服务或本地模型。
 - 支持批量解析，并通过 `concurrency` 控制并发 OCR 数量。
 - 输出目录固定为 `output_dir/<filename>/`，便于后续工具引用。
 - 自动保存 `manifest.json`、`<filename>.json`、`<filename>.md` 和图片目录。
@@ -14,8 +15,7 @@
 
 - Python 3.10+
 - `uv`
-- GLM-OCR 所需的后端环境
-- 如果使用 GLM-OCR MaaS 模式，需要智谱 API Key：`ZHIPU_API_KEY`
+- 智谱 API Key：`ZHIPU_API_KEY`
 
 ## 安装
 
@@ -29,6 +29,7 @@ uv sync
 
 ```powershell
 $env:ZHIPU_API_KEY="你的智谱 API Key"
+$env:GLMOCR_MODE="maas"
 $env:GLMOCR_OUTPUT_PATH="./glmocr_results"
 ```
 
@@ -36,6 +37,7 @@ $env:GLMOCR_OUTPUT_PATH="./glmocr_results"
 
 ```env
 ZHIPU_API_KEY=你的智谱 API Key
+GLMOCR_MODE=maas
 GLMOCR_OUTPUT_PATH=./glmocr_results
 ```
 
@@ -74,7 +76,7 @@ uv run paper-ingest-mcp
 
 ### `parse_with_glmocr`
 
-解析 PDF、图片或公开 URL。
+解析本地 PDF、图片、目录或公开 URL。所有输入都会走 GLM-OCR MaaS/API，不会调用本地 OCR 服务。
 
 参数：
 
@@ -82,11 +84,11 @@ uv run paper-ingest-mcp
 - `filenames`：可选，输出文件名 stem。填写时数量必须和 `sources` 一致。
 - `output_dir`：可选，输出根目录。默认使用 `GLMOCR_OUTPUT_PATH`，否则是 `./glmocr_results`。
 - `concurrency`：可选，并发解析数量，默认 `4`。
-- `layout_device`：可选，透传给 GLM-OCR，例如 `cpu` 或 `cuda:1`。
-- `config`：可选，GLM-OCR 配置文件路径。
+- `layout_device`：兼容旧参数，API 模式下会被忽略。
+- `config`：可选，GLM-OCR 配置文件路径。本项目会强制使用 MaaS/API 模式。
 - `api_key`：可选，智谱 API Key。推荐使用 `ZHIPU_API_KEY` 环境变量。
 
-示例：解析一个本地 PDF。
+示例：通过 API 解析一个本地 PDF。
 
 ```json
 {
@@ -97,7 +99,7 @@ uv run paper-ingest-mcp
 }
 ```
 
-示例：批量解析本地文件。
+示例：通过 API 批量解析本地文件。
 
 ```json
 {
@@ -110,7 +112,7 @@ uv run paper-ingest-mcp
 }
 ```
 
-示例：解析公开 PDF URL。
+示例：通过 API 解析公开 PDF URL。
 
 ```json
 {
@@ -138,7 +140,7 @@ uv run paper-ingest-mcp
 
 除了 MCP 工具，也可以直接用 CLI 测试。
 
-解析本地 PDF：
+通过 API 解析本地 PDF：
 
 ```powershell
 uv run python src/paper_ingest_mcp/glmocr-sdk.py `
@@ -148,7 +150,7 @@ uv run python src/paper_ingest_mcp/glmocr-sdk.py `
   --concurrency 1
 ```
 
-解析公开 URL：
+通过 API 解析公开 URL：
 
 ```powershell
 uv run python src/paper_ingest_mcp/glmocr-sdk.py `
@@ -158,7 +160,7 @@ uv run python src/paper_ingest_mcp/glmocr-sdk.py `
   --concurrency 1
 ```
 
-解析目录内所有支持的文件：
+通过 API 解析目录内所有支持的文件：
 
 ```powershell
 uv run python src/paper_ingest_mcp/glmocr-sdk.py `
@@ -185,9 +187,9 @@ glmocr_results/
 
 ## 并发建议
 
-- 本地 PDF 或图片：通常可以从 `2` 到 `4` 开始。
-- 公开 URL：建议用 `1` 或较小并发，因为工具会先下载远程文件再解析。
-- 大批量任务：优先先把 PDF 下载到本地，再传本地路径。
+- 本地 PDF 或图片：通常可以从 `2` 到 `4` 开始，具体取决于 API 配额、文件大小和网络。
+- 公开 URL：建议用 `1` 或较小并发，避免远程下载和 API 请求同时造成超时。
+- 大批量任务：可以传本地路径或公网 URL；本地路径会由 GLM-OCR API 客户端编码上传。
 - 如果遇到限流、超时或显存压力，降低 `concurrency`。
 
 ## 常见问题
@@ -202,13 +204,17 @@ $env:ZHIPU_API_KEY="你的智谱 API Key"
 
 或写入 `.env`。
 
+### 需要本地 OCR 服务吗
+
+不需要。本项目强制使用 GLM-OCR MaaS/API 模式，只需要 `ZHIPU_API_KEY`。
+
 ### URL 解析很慢
 
-URL 输入会先下载到临时文件，再交给 GLM-OCR。批量处理时建议先下载到本地，然后传本地路径。
+URL 输入需要由 API 访问或处理，速度取决于远程文件下载、网络和 API 响应时间。批量处理时可以降低 `concurrency`。
 
 ### Markdown 图片还是 bbox 占位符
 
-工具会尽量把 GLM-OCR 的图片占位符裁剪成 `imgs/` 下的图片。如果运行环境缺少 PDF 裁剪依赖或输入不是可裁剪的 PDF，可能会保留原始占位符。
+工具会尽量保存 GLM-OCR 返回的图片结果。如果 API 返回的是 bbox 占位符，且输入无法在本地用于裁剪，可能会保留原始占位符。
 
 ### 不想输出到项目目录
 

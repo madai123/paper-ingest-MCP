@@ -32,8 +32,8 @@ class GlmOcrRequest:
     One independent GLM-OCR parse request.
 
     source:
-        Local file path, remote URL, data URI, bytes, or a list of pages accepted by
-        glmocr.parse. A list is treated by upstream GLM-OCR as one multi-page document.
+        Local file path, remote URL, data URI, bytes, or a list accepted by
+        glmocr.parse in MaaS/API mode.
     filename:
         Optional output file/directory stem. When provided, this wrapper writes a
         stable manifest and best-effort JSON/Markdown files under that stem.
@@ -377,10 +377,10 @@ def parse_glmocr_sync(
     **glmocr_kwargs: Any,
 ) -> GlmOcrResponse:
     """
-    Parse one local file, URL, or multi-page document synchronously.
+    Parse one local file, URL, or multi-page document synchronously via API.
 
-    GLM-OCR accepts local paths and URLs directly. This wrapper adds stable output
-    naming and a manifest while preserving upstream result.save output.
+    This wrapper always uses GLM-OCR MaaS/API mode. Local file paths are still
+    valid inputs; they are uploaded by the upstream GLM-OCR client.
     """
     with STDOUT_REDIRECT_LOCK, contextlib.redirect_stdout(sys.stderr):
         return _parse_glmocr_sync_inner(
@@ -406,37 +406,25 @@ def _parse_glmocr_sync_inner(
     target_dir = Path(request.output_dir or output_dir).expanduser().resolve()
     filename = _resolve_filename(request.source, request.filename)
     parse_source: Any = request.source
-    temp_source_dir: tempfile.TemporaryDirectory[str] | None = None
-
-    # GLM-OCR officially accepts URLs, but its local image-region resolver only
-    # crops figures when the source is a local file. Materialize URL inputs so
-    # result.save() can persist cropped images instead of leaving bbox refs.
-    if isinstance(request.source, str) and _is_url(request.source):
-        materialized, temp_source_dir = _materialize_pdf_source(request.source)
-        if materialized is not None:
-            parse_source = materialized
+    glmocr_kwargs["mode"] = "maas"
 
     try:
-        try:
-            result = parse(parse_source, **glmocr_kwargs)
-        except Exception as exc:
-            if exc.__class__.__name__ == "MissingApiKeyError":
-                raise RuntimeError(
-                    "GLM-OCR MaaS mode requires ZHIPU_API_KEY. "
-                    "Set ZHIPU_API_KEY in your shell or .env, or pass --api-key."
-                ) from exc
-            raise
+        result = parse(parse_source, **glmocr_kwargs)
+    except Exception as exc:
+        if exc.__class__.__name__ == "MissingApiKeyError":
+            raise RuntimeError(
+                "GLM-OCR MaaS/API mode requires ZHIPU_API_KEY. "
+                "Set ZHIPU_API_KEY in your shell or .env, or pass --api-key."
+            ) from exc
+        raise
 
-        return _save_result(
-            result=result,
-            source=request.source,
-            filename=filename,
-            output_dir=target_dir,
-            crop_source=parse_source,
-        )
-    finally:
-        if temp_source_dir is not None:
-            temp_source_dir.cleanup()
+    return _save_result(
+        result=result,
+        source=request.source,
+        filename=filename,
+        output_dir=target_dir,
+        crop_source=parse_source,
+    )
 
 
 async def parse_glmocr(
@@ -515,14 +503,14 @@ def _build_cli_requests(args: argparse.Namespace) -> list[GlmOcrRequest]:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="GLM-OCR async batch wrapper for local files and URLs.")
+    parser = argparse.ArgumentParser(description="GLM-OCR MaaS/API batch wrapper for local files and URLs.")
     parser.add_argument("sources", nargs="*", help="Local files, directories, or URLs.")
-    parser.add_argument("--file", action="append", default=[], help="Local file or directory. Repeatable.")
-    parser.add_argument("--url", action="append", default=[], help="Remote file URL. Repeatable.")
+    parser.add_argument("--file", action="append", default=[], help="Local file or directory input. Repeatable.")
+    parser.add_argument("--url", action="append", default=[], help="Remote file URL input. Repeatable.")
     parser.add_argument("--filename", action="append", help="Output stem. Repeat once per input, or once for one input.")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Output directory.")
     parser.add_argument("--concurrency", type=int, default=4, help="Concurrent independent OCR calls.")
-    parser.add_argument("--layout-device", help="Pass-through GLM-OCR layout device, e.g. cpu or cuda:1.")
+    parser.add_argument("--layout-device", help="Ignored in API mode; kept for backward compatibility.")
     parser.add_argument("--config", help="Pass-through GLM-OCR config path.")
     parser.add_argument("--api-key", help="Zhipu API key for GLM-OCR MaaS mode. Prefer ZHIPU_API_KEY env var.")
     return parser
@@ -530,10 +518,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 async def _main_async(args: argparse.Namespace) -> list[GlmOcrResponse]:
     glmocr_kwargs: dict[str, Any] = {}
-    if args.layout_device:
-        glmocr_kwargs["layout_device"] = args.layout_device
     if args.config:
-        glmocr_kwargs["config"] = args.config
+        glmocr_kwargs["config_path"] = args.config
     if args.api_key:
         glmocr_kwargs["api_key"] = args.api_key
 

@@ -1,7 +1,7 @@
 [project]
 name = "paper-ingest-mcp"
 version = "0.1.0"
-description = "Local MCP server for GLM-OCR paper extraction."
+description = "MCP server for GLM-OCR API paper extraction."
 requires-python = ">=3.10"
 dependencies = [
     "mcp[cli]>=1.0.0",
