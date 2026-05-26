@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+
+papers/
+raw/
+output/
+glmocr_results/
+dist/
+*.zip
+*.pdf
+
+.DS_Store
+.vscode/
+.idea/

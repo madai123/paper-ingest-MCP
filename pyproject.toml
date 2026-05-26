@@ -1,0 +1,18 @@
+[project]
+name = "paper-ingest-mcp"
+version = "0.1.0"
+description = "Local MCP server for GLM-OCR paper extraction."
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.2.2",
+    "glmocr>=0.1.5",
+]
+
+[project.scripts]
+paper-ingest-mcp = "paper_ingest_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
